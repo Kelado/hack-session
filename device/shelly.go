@@ -196,3 +196,96 @@ func (d *ShellySwitchPlus) fetchStatus(ctx context.Context) (Status, error) {
 		},
 	}, nil
 }
+
+// Execute performs a command on the Shelly device.
+func (d *ShellySwitchPlus) Execute(ctx context.Context, cmd Command) error {
+	d.mu.RLock()
+	if !d.connected {
+		d.mu.RUnlock()
+		return NewDeviceError(d.info.ID, "execute", fmt.Errorf("device not connected"))
+	}
+	d.mu.RUnlock()
+
+	switch cmd.Action {
+	case "on":
+		return d.setSwitch(ctx, true)
+	case "off":
+		return d.setSwitch(ctx, false)
+	case "toggle":
+		return d.toggleSwitch(ctx)
+	default:
+		return NewDeviceError(d.info.ID, "execute", fmt.Errorf("unknown action: %s", cmd.Action))
+	}
+}
+
+// setSwitch turns the switch on or off.
+func (d *ShellySwitchPlus) setSwitch(ctx context.Context, on bool) error {
+	url := fmt.Sprintf("http://%s/rpc/Switch.Set?id=%d&on=%t", d.info.Address, d.channel, on)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		WasOn bool `json:"was_on"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("parse response: %w", err)
+	}
+
+	d.mu.Lock()
+	d.lastStatus.Power = on
+	d.lastStatus.LastSeen = time.Now()
+	d.mu.Unlock()
+
+	return nil
+}
+
+// toggleSwitch inverts the current switch state.
+func (d *ShellySwitchPlus) toggleSwitch(ctx context.Context) error {
+	url := fmt.Sprintf("http://%s/rpc/Switch.Toggle?id=%d", d.info.Address, d.channel)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		WasOn bool `json:"was_on"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("parse response: %w", err)
+	}
+
+	d.mu.Lock()
+	d.lastStatus.Power = !result.WasOn
+	d.lastStatus.LastSeen = time.Now()
+	d.mu.Unlock()
+
+	return nil
+}
