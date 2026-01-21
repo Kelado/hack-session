@@ -10,18 +10,42 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+// Define the slash commands
+var commands = []*discordgo.ApplicationCommand{
+	{
+		Name:        "ping",
+		Description: "Responds with pong!",
+	},
+	{
+		Name:        "hello",
+		Description: "Get a friendly greeting from the bot",
+	},
+}
+
+// Map command names to their handlers
+var commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
+	"ping": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "pong 🏓",
+			},
+		})
+	},
+	"hello": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Hello there! 👋 Nice to meet you!",
+			},
+		})
+	},
+}
+
 func main() {
 	token := os.Getenv("DISCORD_TOKEN")
 	if token == "" {
 		log.Fatal("Error: DISCORD_TOKEN is not set")
-	}
-
-	// Channel ID where the bot will send the hello message
-	// Enable Developer Mode in Discord (User Settings -> Advanced -> Developer Mode)
-	// Then right-click a channel and "Copy ID"
-	channelID := os.Getenv("DISCORD_CHANNEL_ID")
-	if channelID == "" {
-		log.Fatal("Error: DISCORD_CHANNEL_ID is not set")
 	}
 
 	dg, err := discordgo.New("Bot " + token)
@@ -29,13 +53,12 @@ func main() {
 		log.Fatalf("Error creating Discord session: %v", err)
 	}
 
-	// Register the message handler BEFORE opening the connection
-	dg.AddHandler(messageCreate)
-
-	// Set intents to receive guild messages and message content
-	// Note: You must enable "Message Content Intent" in the Discord Developer Portal
-	// (Bot tab -> Privileged Gateway Intents -> Message Content Intent)
-	dg.Identify.Intents = discordgo.IntentGuildMessages | discordgo.IntentMessageContent
+	// Register the interaction handler for slash commands
+	dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		if handler, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
+			handler(s, i)
+		}
+	})
 
 	err = dg.Open()
 	if err != nil {
@@ -45,32 +68,33 @@ func main() {
 
 	fmt.Println("Bot is running as:", dg.State.User.Username)
 
-	// Send a "Hello, World!" message to the specified channel
-	_, err = dg.ChannelMessageSend(channelID, "Hello, World! 👋")
-	if err != nil {
-		log.Fatalf("Error sending message: %v", err)
+	// Register slash commands globally
+	// Note: Global commands can take up to 1 hour to propagate
+	// For faster testing, you can register them to a specific guild instead
+	registeredCommands := make([]*discordgo.ApplicationCommand, len(commands))
+	for i, cmd := range commands {
+		registered, err := dg.ApplicationCommandCreate(dg.State.User.ID, "", cmd)
+		if err != nil {
+			log.Fatalf("Cannot create command '%s': %v", cmd.Name, err)
+		}
+		registeredCommands[i] = registered
+		fmt.Printf("Registered command: /%s\n", cmd.Name)
 	}
-	fmt.Println("Message sent successfully!")
-	fmt.Println("Bot is now listening for messages. Press CTRL-C to exit.")
+
+	fmt.Println("Bot is now listening for slash commands. Press CTRL-C to exit.")
 
 	// Wait for a termination signal
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
-}
 
-// messageCreate is called every time a new message is created in a channel the bot has access to
-func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	// Ignore messages from the bot itself
-	if m.Author.ID == s.State.User.ID {
-		return
-	}
-
-	// Respond to "ping" with "pong"
-	if m.Content == "ping" {
-		_, err := s.ChannelMessageSend(m.ChannelID, "pong 🏓")
+	// Cleanup: Remove registered commands on shutdown
+	fmt.Println("\nRemoving commands...")
+	for _, cmd := range registeredCommands {
+		err := dg.ApplicationCommandDelete(dg.State.User.ID, "", cmd.ID)
 		if err != nil {
-			log.Printf("Error sending message: %v", err)
+			log.Printf("Cannot delete command '%s': %v", cmd.Name, err)
 		}
 	}
+	fmt.Println("Bot stopped gracefully.")
 }
