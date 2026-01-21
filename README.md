@@ -9,8 +9,7 @@ Select Permissions: Send Messages.
 Copy the URL, paste it in your browser, and invite the bot to your server.
 Initialize Go Project
 
-Create a folder (e.g., hack-session).
-Run go mod init discord-bot.
+Run go mod init hack-session.
 Install the library: go get github.com/bwmarrin/discordgo.
 Showcase 1: The "Broadcaster" (Send Only)
 
