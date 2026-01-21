@@ -10,19 +10,16 @@ import (
 	"time"
 )
 
-// ShellySwitchPlus implements the Device interface for Shelly Plus switches
-// using the Shelly Gen2 HTTP API.
 type ShellySwitchPlus struct {
 	info       DeviceInfo
 	client     *http.Client
 	connected  bool
 	mu         sync.RWMutex
 	lastStatus Status
-	channel    int // Shelly devices can have multiple channels
+	channel    int
 	extInfo    ShellyExtendedInfo
 }
 
-// ShellyExtendedInfo contains additional device information from Shelly API.
 type ShellyExtendedInfo struct {
 	ID           string `json:"id"`
 	MAC          string `json:"mac"`
@@ -197,7 +194,6 @@ func (d *ShellySwitchPlus) fetchStatus(ctx context.Context) (Status, error) {
 	}, nil
 }
 
-// Execute performs a command on the Shelly device.
 func (d *ShellySwitchPlus) Execute(ctx context.Context, cmd Command) error {
 	d.mu.RLock()
 	if !d.connected {
@@ -218,7 +214,6 @@ func (d *ShellySwitchPlus) Execute(ctx context.Context, cmd Command) error {
 	}
 }
 
-// setSwitch turns the switch on or off.
 func (d *ShellySwitchPlus) setSwitch(ctx context.Context, on bool) error {
 	url := fmt.Sprintf("http://%s/rpc/Switch.Set?id=%d&on=%t", d.info.Address, d.channel, on)
 
@@ -254,7 +249,6 @@ func (d *ShellySwitchPlus) setSwitch(ctx context.Context, on bool) error {
 	return nil
 }
 
-// toggleSwitch inverts the current switch state.
 func (d *ShellySwitchPlus) toggleSwitch(ctx context.Context) error {
 	url := fmt.Sprintf("http://%s/rpc/Switch.Toggle?id=%d", d.info.Address, d.channel)
 
