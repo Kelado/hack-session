@@ -4,29 +4,18 @@ import (
 	"fmt"
 	"log"
 	"os"
-
-	"github.com/bwmarrin/discordgo"
 )
 
 func main() {
-	token := os.Getenv("DISCORD_TOKEN")
-	if token == "" {
-		log.Fatal("Error: DISCORD_TOKEN is not set")
+	// Get the Shelly device IP from environment variable
+	// Use dns-sd to discover it:
+	//   dns-sd -B _shelly._tcp local.
+	//   dns-sd -G v4 <device-name>.local
+	shellyIP := os.Getenv("SHELLY_IP")
+	if shellyIP == "" {
+		log.Fatal("Error: SHELLY_IP is not set")
 	}
 
-	dg, err := discordgo.New("Bot " + token)
-	if err != nil {
-		log.Fatalf("Error creating Discord session: %v", err)
-	}
-
-	err = dg.Open()
-	if err != nil {
-		log.Fatalf("Error opening connection: %v", err)
-	}
-	defer dg.Close()
-
-	fmt.Println("Bot is running as:", dg.State.User.Username)
-	fmt.Println("Press CTRL-C to exit.")
-
-	select {}
+	fmt.Println("Shelly device IP:", shellyIP)
+	fmt.Println("Ready to connect to Shelly device...")
 }
